@@ -53,8 +53,8 @@
         </array>
       </dict>
     </array>
-    <key>CFBundleVersion</key>
-    <string>39</string>
+    	<key>CFBundleVersion</key>
+	<string>40</string>
     <key>FacebookAdvertiserIDCollectionEnabled</key>
     <true/>
     <key>FacebookAppID</key>
