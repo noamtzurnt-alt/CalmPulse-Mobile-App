@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "652258881378",
+    "project_id": "calmpulseapprove",
+    "storage_bucket": "calmpulseapprove.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:652258881378:android:5ae757a109ecc5ce8ec63b",
+        "android_client_info": {
+          "package_name": "com.noam_tzur21.finaltest"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "652258881378-86sq1uqui3ot4c53eg8e69vd7j6pin87.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAZUiLfe3hBl4LqFiqxqvpmRVyFRyfWcaU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "652258881378-86sq1uqui3ot4c53eg8e69vd7j6pin87.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "652258881378-f0hbfslfev8icb8fgo79qqf9nlhrk26l.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.noamtzur.calmpulse"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
