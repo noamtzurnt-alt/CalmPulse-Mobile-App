@@ -6,7 +6,7 @@ export default ({ config }) => {
   let finalConfig = {
     name: "CalmPulse",
     slug: "finaltest",
-    version: "3.1.3",
+    version: "3.1.4",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "calmpulse",
@@ -16,12 +16,12 @@ export default ({ config }) => {
     updates: {
       enabled: false
     },
-    runtimeVersion: "3.1.3",
+    runtimeVersion: "3.1.4",
 
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.noamtzur.calmpulse",
-      buildNumber: "41",
+      buildNumber: "42",
       infoPlist: {
         UIRequiresFullScreen: false,
         ITSAppUsesNonExemptEncryption: false,
@@ -95,7 +95,7 @@ export default ({ config }) => {
         backgroundColor: "#ffffff"
       },
       package: "com.noam_tzur21.finaltest",
-      versionCode: 61,
+      versionCode: 62,
       permissions: [
         "INTERNET",
         "VIBRATE",
