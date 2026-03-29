@@ -182,7 +182,7 @@ export default function MyPlanStage({ onComplete }: MyPlanStageProps) {
                 >
                   <View style={styles.buttonContent}>
                     <Ionicons name="flame" size={18} color="#FFFFFF" style={styles.buttonIcon} />
-                    <Text allowFontScaling={false} maxFontSizeMultiplier={1} style={styles.primaryButtonText}>Let\'s begin</Text>
+                    <Text allowFontScaling={false} maxFontSizeMultiplier={1} style={styles.primaryButtonText}>Let's begin</Text>
                   </View>
                 </Pressable>
               </Animated.View>

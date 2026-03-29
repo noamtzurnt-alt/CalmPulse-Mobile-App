@@ -279,8 +279,6 @@ export default function OnSignupStage({ onBack, onComplete, onLogin }: OnSignupS
         >
           {/* Header */}
           <View style={styles.header}>
-            
-            
             <View style={styles.logoContainer}>
               <Image
                 source={OnboardingImages.pulseLogo}

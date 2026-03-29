@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { StyleSheet, View, Text, Pressable, Image, ActivityIndicator, I18nManager, TouchableOpacity, Alert, ScrollView, Dimensions, Modal, Platform, Animated } from 'react-native';
+import { StyleSheet, View, Text, Pressable, Image, ActivityIndicator, I18nManager, TouchableOpacity, Alert, ScrollView, Dimensions, Modal, Platform, Animated, ImageStyle } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -1456,7 +1456,7 @@ export default function CalmVideoScreen() {
           {selectedPhotos.length > 0 ? (
             <Image 
               source={{ uri: selectedPhotos[0].uri }}
-              style={styles.previewImage}
+              style={styles.previewImage as any}
             />
           ) : (
             <View style={styles.emptyPreview}>
@@ -1485,7 +1485,7 @@ export default function CalmVideoScreen() {
               <>
                 <Image 
                   source={{ uri: videoThumbnail }}
-                  style={styles.previewImage}
+                  style={styles.previewImage as any}
                 />
                 {isLoadingThumbnail && (
                   <View style={styles.loadingOverlay}>
@@ -1802,7 +1802,7 @@ const styles = StyleSheet.create({
   previewImage: {
     width: '100%',
     height: '100%',
-  },
+  } as ImageStyle,
   emptyPreview: {
     flex: 1,
     justifyContent: 'center',

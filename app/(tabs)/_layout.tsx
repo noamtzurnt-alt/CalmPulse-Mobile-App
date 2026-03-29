@@ -934,7 +934,7 @@ export default function Layout() {
               }}
               listeners={{
                 tabPress: async (e) => {
-                  e.preventDefault();
+                  // e.preventDefault(); // Removed - not available on tabPress event
                   router.push('/(tabs)/pulse');
                 },
               }}

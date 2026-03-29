@@ -16,6 +16,7 @@ import {
   Image,
   Animated,
   Easing,
+  ImageStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -672,7 +673,7 @@ export default function PulseScreen() {
           )}
           <Image 
             source={require('../../assets/images/adaptive-icon.png')}
-            style={styles.welcomeLogo}
+            style={styles.welcomeLogo as any}
             resizeMode="contain"
           />
         </Animated.View>
@@ -774,7 +775,7 @@ export default function PulseScreen() {
                       <View style={styles.botAvatar}>
                         <Image 
                           source={require('../../assets/images/pulse_resized_140x140.png')}
-                          style={styles.botAvatarImage}
+                          style={styles.botAvatarImage as any}
                         />
                       </View>
                     )}
@@ -794,12 +795,12 @@ export default function PulseScreen() {
                         {userPhotoURL ? (
                           <Image 
                             source={{ uri: userPhotoURL }}
-                            style={styles.userAvatarImage}
+                            style={styles.userAvatarImage as any}
                           />
                         ) : (
                           <Image 
                             source={require('../../assets/images/sarah-avatar-compressed.png')}
-                            style={styles.userAvatarImage}
+                            style={styles.userAvatarImage as any}
                           />
                         )}
                       </View>
@@ -812,7 +813,7 @@ export default function PulseScreen() {
                     <View style={styles.botAvatar}>
                       <Image 
                         source={require('../../assets/images/pulse_resized_140x140.png')}
-                        style={styles.botAvatarImage}
+                        style={styles.botAvatarImage as any}
                       />
                     </View>
                     <View style={[styles.messageBubble, styles.botBubble]}>
@@ -929,7 +930,7 @@ const styles = StyleSheet.create({
   welcomeLogo: {
     width: 280,
     height: 280,
-  },
+  } as ImageStyle,
   chatPulseButtonContainer: {
     alignItems: 'center',
   },
@@ -1110,7 +1111,7 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 15,
     resizeMode: 'cover',
-  },
+  } as ImageStyle,
   botAvatarText: {
     color: '#60A5FA',
     fontSize: 14,
@@ -1132,7 +1133,7 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 15,
     resizeMode: 'cover',
-  },
+  } as ImageStyle,
   userAvatarText: {
     color: '#60A5FA',
     fontSize: 14,

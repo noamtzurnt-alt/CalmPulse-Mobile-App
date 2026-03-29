@@ -6,7 +6,7 @@ export default ({ config }) => {
   let finalConfig = {
     name: "CalmPulse",
     slug: "finaltest",
-    version: "3.1.4",
+    version: "3.1.7",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "calmpulse",
@@ -16,12 +16,12 @@ export default ({ config }) => {
     updates: {
       enabled: false
     },
-    runtimeVersion: "3.1.4",
+    runtimeVersion: "3.1.7",
 
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.noamtzur.calmpulse",
-      buildNumber: "42",
+      buildNumber: "47",
       infoPlist: {
         UIRequiresFullScreen: false,
         ITSAppUsesNonExemptEncryption: false,
@@ -95,7 +95,7 @@ export default ({ config }) => {
         backgroundColor: "#ffffff"
       },
       package: "com.noam_tzur21.finaltest",
-      versionCode: 62,
+      versionCode: 69,
       permissions: [
         "INTERNET",
         "VIBRATE",
@@ -159,8 +159,7 @@ export default ({ config }) => {
         process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID,
       GOOGLE_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
       GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-      GOOGLE_ANDROID_CLIENT_ID:
-        process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+      GOOGLE_ANDROID_CLIENT_ID:process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
       PULSE_API_URL: process.env.EXPO_PUBLIC_PULSE_API_URL,
       FB_APP_ID: "1742913186412628",
       FB_DISPLAY_NAME: "CalmPulse",

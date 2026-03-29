@@ -129,16 +129,20 @@ export default function JournalScreen() {
         }
         
         // For authenticated users
-    if (!auth) {
-      console.log('Firebase auth not initialized');
-      return;
-    }
-    
-    const user = auth.currentUser;
-    if (user) {
+        if (!auth || !db) {
+          console.log('❌ Firebase not initialized - falling back to guest mode');
+          loadJournalHistory();
+          return;
+        }
+        
+        const user = auth.currentUser;
+        if (user) {
           console.log('👤 Loading initial journal data for authenticated user');
-      loadJournalEntries();
-    }
+          loadJournalEntries();
+        } else {
+          console.log('❌ No user logged in - falling back to guest mode');
+          loadJournalHistory();
+        }
       } catch (error) {
         console.error('Error loading initial journal data:', error);
       }
@@ -164,17 +168,21 @@ export default function JournalScreen() {
           }
           
           // For authenticated users
-      if (!auth) {
-        console.log('Firebase auth not initialized');
-        return;
-      }
-      
-      const user = auth.currentUser;
-      if (user) {
+          if (!auth || !db) {
+            console.log('❌ Firebase not initialized - falling back to guest mode');
+            loadJournalHistory();
+            return;
+          }
+          
+          const user = auth.currentUser;
+          if (user) {
             console.log('👤 Loading journal data for authenticated user');
-        loadJournalEntries();
-        loadJournalHistory();
-      }
+            loadJournalEntries();
+            loadJournalHistory();
+          } else {
+            console.log('❌ No user logged in - falling back to guest mode');
+            loadJournalHistory();
+          }
         } catch (error) {
           console.error('Error loading journal data:', error);
         }
@@ -200,15 +208,19 @@ export default function JournalScreen() {
         return;
       }
       
-      // For authenticated users
-      if (!auth) {
-        console.log('Firebase auth not initialized');
+      // For authenticated users - check Firebase initialization
+      if (!auth || !db) {
+        console.log('❌ Firebase not initialized - auth:', !!auth, 'db:', !!db);
+        // Try to load from AsyncStorage as fallback
+        const existing = await AsyncStorage.getItem('guestJournalEntries');
+        const entries = existing ? JSON.parse(existing) : [];
+        setJournalEntries(entries);
         return;
       }
+      
       const user = auth.currentUser;
-      if (!user) return;
-      if (!db) {
-        console.log('Firestore not initialized');
+      if (!user) {
+        console.log('❌ No user logged in');
         return;
       }
       const userRef = doc(db, 'users', user.uid);
@@ -231,22 +243,31 @@ export default function JournalScreen() {
         return;
       }
       
-      // For authenticated users, load from user document
-      const userData = await getUserData();
-      if (userData?.journalEntries) {
-        const entries = userData.journalEntries.map((entry, index) => ({
-          text: entry.content,
-          date: new Date(Date.now() - (userData.journalEntries!.length - index - 1) * 60000).toISOString(), // Approximate date based on order
-      }));
-      setJournalHistory(entries);
-        console.log('✅ Loaded journal entries from user document:', entries.length);
-      } else {
-        console.log('⚠️ No journal entries found in user document');
-        setJournalHistory([]);
+      // For authenticated users, try to load from user document
+      try {
+        const userData = await getUserData();
+        if (userData?.journalEntries) {
+          const entries = userData.journalEntries.map((entry, index) => ({
+            text: entry.content,
+            date: new Date(Date.now() - (userData.journalEntries!.length - index - 1) * 60000).toISOString(), // Approximate date based on order
+        }));
+        setJournalHistory(entries);
+          console.log('✅ Loaded journal entries from user document:', entries.length);
+        } else {
+          console.log('⚠️ No journal entries found in user document');
+          setJournalHistory([]);
+        }
+      } catch (firebaseError) {
+        console.log('❌ Firebase error, falling back to local storage:', firebaseError);
+        // Fallback to local storage
+        const existing = await AsyncStorage.getItem('guestJournalEntries');
+        const entries = existing ? JSON.parse(existing) : [];
+        setJournalHistory(entries);
       }
     } catch (error) {
       console.error('Error loading journal history:', error);
-      Alert.alert('Error', 'Failed to load journal history');
+      // Don't show alert, just set empty history
+      setJournalHistory([]);
     }
   };
 
@@ -459,20 +480,27 @@ export default function JournalScreen() {
       return;
     }
     try {
-      if (!auth) {
-        console.log('Firebase auth not initialized');
-        // setIsLoading(false);
+      if (!auth || !db) {
+        console.log('❌ Firebase not initialized - auth:', !!auth, 'db:', !!db);
+        // Fallback to guest mode
+        await saveGuestJournal(journalText);
+        setJournalText('');
+        if (!silent) {
+          await showInterstitialAd();
+          Alert.alert('Success', 'Journal entry saved locally');
+        }
         return;
       }
+      
       const user = auth.currentUser;
       if (!user) {
-        console.log('No user logged in');
-        // setIsLoading(false);
-        return;
-      }
-      if (!db) {
-        console.log('Firestore not initialized');
-        // setIsLoading(false);
+        console.log('❌ No user logged in - falling back to guest mode');
+        await saveGuestJournal(journalText);
+        setJournalText('');
+        if (!silent) {
+          await showInterstitialAd();
+          Alert.alert('Success', 'Journal entry saved locally');
+        }
         return;
       }
       const journalRef = collection(db, 'users', user.uid, 'journal');
@@ -541,9 +569,16 @@ export default function JournalScreen() {
         return;
       }
       // Authenticated: remove from user document journalEntries array
-      if (!auth) return;
+      if (!auth || !db) {
+        console.log('❌ Firebase not initialized - cannot delete entry');
+        return;
+      }
+      
       const user = auth.currentUser;
-      if (!user) return;
+      if (!user) {
+        console.log('❌ No user logged in - cannot delete entry');
+        return;
+      }
       const userRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userRef);
       if (userDoc.exists()) {
@@ -571,16 +606,14 @@ export default function JournalScreen() {
 
   const clearHistory = async () => {
     try {
-      if (!auth) {
-        console.log('Firebase auth not initialized');
+      if (!auth || !db) {
+        console.log('❌ Firebase not initialized - cannot clear history');
         return;
       }
       
       const user = auth.currentUser;
-      if (!user) return;
-
-      if (!db) {
-        console.log('Firestore not initialized');
+      if (!user) {
+        console.log('❌ No user logged in - cannot clear history');
         return;
       }
       

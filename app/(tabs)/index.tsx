@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Pressable, SafeAreaView, Text, Animated, Platform, Dimensions } from 'react-native';
+import { StyleSheet, View, Pressable, SafeAreaView, Text, Animated, Platform, Dimensions, ImageStyle } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
       { translateX: -Math.min(screenWidth * 0.325, 160) },
       { translateY: -Math.min(screenWidth * 0.325, 160) },
     ],
-  },
+  } as ImageStyle,
   buttonsSection: {
     position: 'absolute',
     bottom: screenHeight * 0.25,

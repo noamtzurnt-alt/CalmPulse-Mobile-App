@@ -20,8 +20,8 @@
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key>
     <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
-    	<key>CFBundleShortVersionString</key>
-	<string>3.1.4</string>
+    <key>CFBundleShortVersionString</key>
+    <string>3.1.7</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleURLTypes</key>
@@ -53,8 +53,8 @@
         </array>
       </dict>
     </array>
-    	<key>CFBundleVersion</key>
-	<string>42</string>
+    <key>CFBundleVersion</key>
+    <string>47</string>
     <key>FacebookAdvertiserIDCollectionEnabled</key>
     <true/>
     <key>FacebookAppID</key>
@@ -95,6 +95,8 @@
     </dict>
     <key>NSCameraUsageDescription</key>
     <string>We use your camera to let you take photos and videos for creating personalized calming content within the CalmPulse app.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your microphone</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>We save your selected calming photos and videos to your library if you choose to export them from the app.</string>
     <key>NSPhotoLibraryUsageDescription</key>

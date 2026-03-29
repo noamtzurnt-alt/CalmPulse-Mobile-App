@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,9 @@ import { OnboardingImages } from '@/constants/Images';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { getOfferings, purchasePackage, restorePurchases, getCustomerInfo, isPremiumFromCustomerInfo, syncRevenueCatUser } from '@/lib/revenueCat';
+import { auth, db } from '@/lib/firebase';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { AppEventsLogger } from 'react-native-fbsdk-next';
 
 interface PaywallStageProps {
   onComplete: () => void;
@@ -24,11 +28,15 @@ interface PaywallStageProps {
   source?: 'pulse-ai' | 'afterinfo';
 }
 
-export default function PaywallStage({ onComplete }: PaywallStageProps) {
+export default function PaywallStage({ onComplete, source }: PaywallStageProps) {
   const insets = useSafeAreaInsets();
   const [imageLoaded, setImageLoaded] = useState(false);
   const [showSlowConnectionMessage, setShowSlowConnectionMessage] = useState(false);
   const [busy, setBusy] = useState<boolean>(false);
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const params = useLocalSearchParams<any>();
   const router = useRouter();
 
@@ -64,19 +72,43 @@ export default function PaywallStage({ onComplete }: PaywallStageProps) {
     try { router.replace('/(tabs)'); } catch {}
   };
 
-  const handlePurchase = async () => {
+  const handlePurchase = async (planType: 'monthly' | 'sixMonth' = 'monthly') => {
     if (busy) return;
     setBusy(true);
+    
+    // Facebook Pixel Event - Purchase Button Clicked
+    try {
+      AppEventsLogger.logEvent('Purchase_Button_Clicked', {
+        'plan_type': planType,
+        'source': source || String((params as any)?.source || ''),
+        'user_id': auth.currentUser?.uid || 'anonymous'
+      });
+      console.log('✅ Facebook event: Purchase_Button_Clicked logged');
+    } catch (fbError) {
+      console.log('⚠️ Facebook Purchase_Button_Clicked event failed:', fbError);
+    }
+    
     try {
       const offerings = await getOfferings();
       const available = offerings?.availablePackages || [];
-      const monthly = available.find((p: any) => p?.identifier === '$rc_monthly') || available[0];
-      if (!monthly) {
+      
+      let selectedPackage;
+      if (planType === 'sixMonth') {
+        // Look for 6-month package first, then fallback to any package
+        selectedPackage = available.find((p: any) => p?.identifier === '$rc_six_month') || 
+                         available.find((p: any) => p?.identifier?.includes('6') || p?.identifier?.includes('six')) ||
+                         available[0];
+      } else {
+        // Monthly package
+        selectedPackage = available.find((p: any) => p?.identifier === '$rc_monthly') || available[0];
+      }
+      
+      if (!selectedPackage) {
         Alert.alert('Network error', 'Network error. Try again.');
         setBusy(false);
-      return;
-    }
-      const result: any = await purchasePackage(monthly);
+        return;
+      }
+      const result: any = await purchasePackage(selectedPackage);
       // If user cancelled
       if (result?.userCancelled) {
         Toast.show({ type: 'info', text1: 'Purchase cancelled.' });
@@ -100,6 +132,55 @@ export default function PaywallStage({ onComplete }: PaywallStageProps) {
         }
       }
       if (active) {
+        try {
+          await addDoc(collection(db, 'pruchase'), {
+            uid: auth.currentUser?.uid || null,
+            event: 'purchase_success',
+            next: 'index',
+            source: source || String((params as any)?.source || ''),
+            createdAt: serverTimestamp(),
+          });
+        } catch {}
+        
+        // Facebook Pixel Events
+        try {
+          // Track Purchase Event (Standard Facebook Event)
+          AppEventsLogger.logPurchase(9.99, 'USD', {
+            'fb_content_type': 'product',
+            'fb_content_name': 'CalmPulse Premium',
+            'fb_content_category': 'subscription',
+            'fb_content_id': 'premium_monthly',
+            'source': source || String((params as any)?.source || ''),
+            'plan_type': planType
+          });
+          
+          // Track Subscription Event (Better for subscriptions)
+          AppEventsLogger.logEvent('SubscriptionInitiated', {
+            'fb_currency': 'USD',
+            'fb_value': 9.99,
+            'fb_content_type': 'subscription',
+            'fb_content_name': 'CalmPulse Premium',
+            'fb_content_category': 'wellness',
+            'fb_content_id': 'premium_monthly',
+            'source': source || String((params as any)?.source || ''),
+            'plan_type': planType,
+            'user_id': auth.currentUser?.uid || 'anonymous'
+          });
+          
+          // Track Custom Event for Campaign Optimization
+          AppEventsLogger.logEvent('Premium_Purchase', {
+            'plan_type': planType,
+            'source': source || String((params as any)?.source || ''),
+            'user_id': auth.currentUser?.uid || 'anonymous',
+            'campaign_source': 'facebook_ads',
+            'conversion_value': 9.99
+          });
+          
+          console.log('✅ Facebook events logged for purchase');
+        } catch (fbError) {
+          console.log('⚠️ Facebook events failed:', fbError);
+        }
+        
         Toast.show({ type: 'success', text1: 'Premium activated. Enjoy full access 🎉' });
         doRedirect();
         } else {
@@ -135,6 +216,38 @@ export default function PaywallStage({ onComplete }: PaywallStageProps) {
     }
   };
 
+  const showClose = (source === 'pulse-ai') || (String((params as any)?.source || '') === 'pulse-ai');
+
+  // Start animation when component mounts
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 3,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
+    // Facebook Pixel Event - Paywall Viewed
+    try {
+      AppEventsLogger.logEvent('Paywall_Viewed', {
+        'source': source || String((params as any)?.source || ''),
+        'user_id': auth.currentUser?.uid || 'anonymous',
+        'timestamp': new Date().toISOString()
+      });
+      console.log('✅ Facebook event: Paywall_Viewed logged');
+    } catch (fbError) {
+      console.log('⚠️ Facebook Paywall_Viewed event failed:', fbError);
+    }
+  }, []);
+
+
   return (
     <ImageBackground
       source={OnboardingImages.pulseBackground}
@@ -165,12 +278,14 @@ export default function PaywallStage({ onComplete }: PaywallStageProps) {
             <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
         <View style={styles.content}>
           {/* Top Buttons */}
-          <View style={styles.topButtonsContainer}>
-            <View style={styles.closeButton}>
-              <Pressable onPress={() => { if (busy) return; doRedirect(); }} disabled={busy}>
-                <Ionicons name="close" size={24} color="white" />
-              </Pressable>
-            </View>
+          <View style={[styles.topButtonsContainer, { justifyContent: showClose ? 'space-between' : 'flex-end' }]}>
+            {showClose && (
+              <View style={styles.closeButton}>
+                <Pressable onPress={() => { if (busy) return; doRedirect(); }} disabled={busy}>
+                  <Ionicons name="close" size={24} color="white" />
+                </Pressable>
+              </View>
+            )}
             <Pressable style={styles.restoreButton} onPress={handleRestore} disabled={busy}>
               <Text style={styles.restoreText} allowFontScaling={false}>Restore Purchase</Text>
             </Pressable>
@@ -179,76 +294,74 @@ export default function PaywallStage({ onComplete }: PaywallStageProps) {
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.premiumTitle} allowFontScaling={false}>Get Premium</Text>
-            <Text style={styles.premiumSubtitle} allowFontScaling={false}>Unlock all premium features</Text>
+            <Text style={styles.premiumSubtitle} allowFontScaling={false}>Premium Features</Text>
           </View>
 
-          {/* Features List */}
-          <ScrollView
-            style={styles.featuresContainer}
-            contentContainerStyle={{ paddingBottom: 8 }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={[styles.featureItem, { borderColor: 'rgba(96, 165, 250, 0.8)' }]}>
-              <View style={styles.featureIcon}><Ionicons name="chatbubble-ellipses" size={24} color="#60A5FA" /></View>
-              <View style={styles.featureText}><Text style={styles.featureTitle} allowFontScaling={false}>Pulse AI - Personal AI companion</Text></View>
-            </View>
-
-            <View style={[styles.featureItem, { borderColor: 'rgba(239, 68, 68, 0.8)' }]}>
-              <View style={styles.featureIcon}><Ionicons name="videocam" size={24} color="#EF4444" /></View>
-              <View style={styles.featureText}><Text style={styles.featureTitle} allowFontScaling={false}>Video Creator - Create videos</Text></View>
-            </View>
-
-            <View style={[styles.featureItem, { borderColor: 'rgba(16, 185, 129, 0.8)' }]}>
-              <View style={styles.featureIcon}><Ionicons name="book" size={24} color="#10B981" /></View>
-              <View style={styles.featureText}><Text style={styles.featureTitle} allowFontScaling={false}>Personal Journal - Track mood</Text></View>
-            </View>
-
-            <View style={[styles.featureItem, { borderColor: 'rgba(168, 85, 247, 0.8)' }]}>
-              <View style={styles.featureIcon}><Ionicons name="shield-checkmark" size={24} color="#A855F7" /></View>
-              <View style={styles.featureText}><Text style={styles.featureTitle} allowFontScaling={false}>No Ads - Ad free experience</Text></View>
-            </View>
-          </ScrollView>
+          {/* Premium Benefits */}
+          <View style={styles.benefitsContainer}>
+              <View style={styles.benefitsGrid}>
+                <View style={styles.benefitItem}>
+                  <Ionicons name="sparkles" size={32} color="#FFD700" />
+                  <Text style={styles.benefitText} allowFontScaling={false}>AI Features</Text>
+                </View>
+                <View style={styles.benefitItem}>
+                  <Ionicons name="videocam" size={32} color="#FF6B6B" />
+                  <Text style={styles.benefitText} allowFontScaling={false}>Video Creator</Text>
+                </View>
+                <View style={styles.benefitItem}>
+                  <Ionicons name="shield-checkmark" size={32} color="#4ECDC4" />
+                  <Text style={styles.benefitText} allowFontScaling={false}>No Ads</Text>
+                </View>
+                <View style={styles.benefitItem}>
+                  <Ionicons name="infinite" size={32} color="#A8E6CF" />
+                  <Text style={styles.benefitText} allowFontScaling={false}>Unlimited</Text>
+                </View>
+              </View>
+              <Animated.Text 
+                style={[
+                  styles.compellingText, 
+                  {
+                    opacity: fadeAnim,
+                    transform: [{ scale: scaleAnim }]
+                  }
+                ]} 
+                allowFontScaling={false}
+              >
+                Start your journey to inner peace today 💫
+              </Animated.Text>
+          </View>
 
           {/* Pricing Section */}
           <View style={[styles.pricingContainer, { alignItems: 'center' }]}>
-                                    {/* Monthly Plan */}
-            <Pressable style={({ pressed }) => [styles.monthlyPlan, { width: '92%', maxWidth: 720 }, pressed && styles.pressed]} onPress={handlePurchase} disabled={busy}>
-              <View style={styles.popularBadge}><Text style={styles.popularText} allowFontScaling={false}>BEST DEAL</Text></View>
-                          <View style={styles.planHeader}>
+            <View style={styles.pricingRow}>
+              {/* Monthly Plan - Left */}
+              <Pressable style={({ pressed }) => [styles.monthlyPlan, { flex: 1, marginRight: 6 }, pressed && styles.pressed]} onPress={() => handlePurchase('monthly')} disabled={busy}>
+                <View style={styles.popularBadge}><Text style={styles.popularText} allowFontScaling={false}>POPULAR</Text></View>
                 <Text style={styles.planTitle} allowFontScaling={false}>Monthly</Text>
-                            <View style={styles.priceContainer}>
-                              <View style={styles.priceRow}>
-                    <Text style={styles.originalPrice} allowFontScaling={false}>$19.99</Text>
-                    <Text style={styles.price} allowFontScaling={false}>$9.99</Text>
-                              </View>
-                  <Text style={styles.period} allowFontScaling={false}>/month</Text>
-                            </View>
-                          </View>
-              <Text style={styles.planDescription} numberOfLines={1} allowFontScaling={false}>Get started now - Join thousands of users</Text>
-                          <Text style={styles.savingsText} numberOfLines={1} allowFontScaling={false}>Save 50%</Text>
-                        </Pressable>
-
-            {/* 6 Months Plan */}
-            <Pressable style={({ pressed }) => [styles.yearlyPlan, { width: '92%', maxWidth: 720 }, pressed && styles.pressed]} onPress={handlePurchase} disabled={busy}>
-              <View style={styles.planHeader}>
-                <Text style={styles.planTitle} allowFontScaling={false}>6 Months</Text>
                 <View style={styles.priceContainer}>
-                  <View style={styles.priceRow}>
-                    <Text style={styles.originalPrice} allowFontScaling={false}>$119.94</Text>
-                    <Text style={styles.price} allowFontScaling={false}>$49.99</Text>
+                  <Text style={styles.originalPrice} allowFontScaling={false}>$19.99</Text>
+                  <View style={styles.glowContainer}>
+                    <Text style={styles.price} allowFontScaling={false}>$9.99</Text>
                   </View>
-                  <Text style={styles.period} allowFontScaling={false}>/6 months</Text>
                 </View>
-              </View>
-              <Text style={styles.planDescription} numberOfLines={1} allowFontScaling={false}>Best value - Limited time offer</Text>
-              <Text style={styles.savingsText} numberOfLines={1} allowFontScaling={false}>Save $9.95</Text>
-            </Pressable>
+              </Pressable>
+
+              {/* 6 Months Plan - Right */}
+              <Pressable style={({ pressed }) => [styles.yearlyPlan, { flex: 1, marginLeft: 6 }, pressed && styles.pressed]} onPress={() => handlePurchase('sixMonth')} disabled={busy}>
+                <Text style={styles.planTitle} allowFontScaling={false}>6 Month</Text>
+                <View style={styles.priceContainer}>
+                  <Text style={styles.originalPrice} allowFontScaling={false}>$59.94</Text>
+                  <View style={styles.glowContainer}>
+                    <Text style={styles.price} allowFontScaling={false}>$8.33</Text>
+                  </View>
+                </View>
+              </Pressable>
+            </View>
           </View>
 
           {/* Action Button */}
           <View style={[styles.actionContainer, { alignItems: 'center' }]}>
-            <Pressable style={({ pressed }) => [styles.yearlyButton, { width: '92%', maxWidth: 720 }, pressed && styles.pressed]} onPress={handlePurchase} disabled={busy}>
+            <Pressable style={({ pressed }) => [styles.yearlyButton, { width: '92%', maxWidth: 720 }, pressed && styles.pressed]} onPress={() => handlePurchase('monthly')} disabled={busy}>
               <Text style={styles.yearlyButtonText} allowFontScaling={false}>Start Now Feel Calm</Text>
             </Pressable>
           </View>
@@ -287,31 +400,33 @@ const styles = StyleSheet.create({
   closeButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0, 0, 0, 0.3)', alignItems: 'center', justifyContent: 'center' },
   restoreButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(255, 255, 255, 0.2)' },
   restoreText: { color: 'white', fontSize: 14, fontWeight: '600' },
-  header: { alignItems: 'center', marginTop: 24, marginBottom: 12 },
-  premiumTitle: { fontSize: 32, fontWeight: '700', color: '#FFFFFF', textAlign: 'center', marginBottom: 8, textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3 },
-  premiumSubtitle: { fontSize: 16, color: '#FFFFFF', textAlign: 'center', textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
-  featuresContainer: { marginBottom: Platform.OS === 'android' ? 5 : 12, paddingHorizontal: 12, marginTop: Platform.OS === 'android' ? -10 : -4, flexShrink: 1, maxHeight: 360 },
-  featureItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.8)', borderRadius: 8, padding: 8, marginBottom: 6, borderWidth: 1.5 },
-  featureIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255, 255, 255, 0.4)', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  featureText: { flex: 1 },
-  featureTitle: { fontSize: 13, fontWeight: '900', color: '#FFFFFF', marginBottom: 2, textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
-  pricingContainer: { marginBottom: Platform.OS === 'android' ? 10 : 20, marginTop: Platform.OS === 'android' ? -20 : 4, minHeight: 180, justifyContent: 'flex-start', gap: Platform.OS === 'android' ? 4 : 8 },
-  monthlyPlan: { backgroundColor: 'rgba(96, 165, 250, 0.95)', borderRadius: 14, padding: 16, marginBottom: 8, borderWidth: 2.5, borderColor: '#60A5FA', shadowColor: '#60A5FA', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.6, shadowRadius: 8, elevation: 6 },
-  yearlyPlan: { backgroundColor: 'rgba(255, 255, 255, 0.7)', borderRadius: 14, padding: 16, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.8)', position: 'relative', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 4 },
-  popularBadge: { alignSelf: 'flex-end', backgroundColor: '#EF4444', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: 8 },
-  popularText: { fontSize: 10, fontWeight: '700', color: 'white' },
+  header: { alignItems: 'center', marginTop: 40, marginBottom: 20 },
+  premiumTitle: { fontSize: 36, fontWeight: '800', color: '#FFFFFF', textAlign: 'center', marginBottom: 8, textShadowColor: 'rgba(0, 0, 0, 0.7)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 4 },
+  premiumSubtitle: { fontSize: 18, color: '#FFFFFF', textAlign: 'center', textShadowColor: 'rgba(0, 0, 0, 0.6)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3, fontWeight: '600' },
+  benefitsContainer: { marginBottom: 25, paddingHorizontal: 20, marginTop: -30 },
+  benefitsGrid: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, gap: 12 },
+  benefitItem: { alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.2)', borderRadius: 12, padding: 14, width: 80, height: 80, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6, justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.4)' },
+  benefitText: { fontSize: 9, fontWeight: '800', color: '#FFFFFF', marginTop: 4, textAlign: 'center', textShadowColor: 'rgba(0, 0, 0, 0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  compellingText: { fontSize: 16, fontWeight: '800', color: '#FFFFFF', textAlign: 'center', marginTop: 16, textShadowColor: 'rgba(0, 0, 0, 0.9)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 4, lineHeight: 20 },
+  pricingContainer: { marginBottom: 20, marginTop: 20, paddingHorizontal: 20, position: 'relative' },
+  pricingRow: { flexDirection: 'row', width: '100%', gap: 16, justifyContent: 'space-between', position: 'absolute', left: 20, right: 20, top: 40, zIndex: 10 },
+  monthlyPlan: { backgroundColor: 'rgba(96, 165, 250, 0.95)', borderRadius: 16, padding: 16, borderWidth: 3, borderColor: '#60A5FA', shadowColor: '#60A5FA', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.8, shadowRadius: 12, elevation: 8, alignItems: 'center', justifyContent: 'center', flex: 1, minHeight: 110, maxHeight: 110, transform: [{ scale: 1.02 }] },
+  yearlyPlan: { backgroundColor: 'rgba(255, 255, 255, 0.85)', borderRadius: 16, padding: 16, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.9)', position: 'relative', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 5, alignItems: 'center', justifyContent: 'center', flex: 1, minHeight: 110, maxHeight: 110 },
+  popularBadge: { position: 'absolute', top: -8, right: -8, backgroundColor: '#EF4444', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, zIndex: 10 },
+  popularText: { fontSize: 9, fontWeight: '700', color: 'white' },
   planHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  planTitle: { fontSize: 17, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.3, textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
-  priceContainer: { alignItems: 'flex-end' },
+  planTitle: { fontSize: 16, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.3, textShadowColor: 'rgba(0, 0, 0, 0.7)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3, marginBottom: 6, textAlign: 'center' },
+  priceContainer: { alignItems: 'center', flexDirection: 'column', gap: 2 },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  originalPrice: { fontSize: 14, fontWeight: '400', color: 'rgba(255, 255, 255, 0.9)', textDecorationLine: 'line-through', textShadowColor: 'rgba(0, 0, 0, 0.6)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 2 },
-  price: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.5, textShadowColor: 'rgba(0, 0, 0, 0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  originalPrice: { fontSize: 12, fontWeight: '500', color: 'rgba(255, 255, 255, 0.6)', textDecorationLine: 'line-through', textShadowColor: 'rgba(0, 0, 0, 0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2, textAlign: 'center' },
+  price: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.5, textShadowColor: 'rgba(0, 0, 0, 0.6)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4, textAlign: 'center', borderBottomWidth: 2, borderBottomColor: 'rgba(255, 255, 255, 0.9)', paddingBottom: 2 },
+  glowContainer: { shadowColor: '#60A5FA', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 12, elevation: 8 },
   period: { fontSize: 12, color: '#FFFFFF', fontWeight: '600', textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   planDescription: { fontSize: 12, color: '#FFFFFF', marginBottom: 3, fontWeight: '700', textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   savingsText: { fontSize: 11, color: '#10B981', fontWeight: '700', textShadowColor: 'rgba(0, 0, 0, 0.7)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3 },
-  actionContainer: { marginBottom: Platform.OS === 'android' ? 0 : 20, marginTop: Platform.OS === 'android' ? -5 : -5 },
-  yearlyButton: { backgroundColor: '#3B82F6', borderRadius: 12, paddingVertical: 20, paddingHorizontal: 40, alignItems: 'center', marginBottom: 8, shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 6 },
-  yearlyButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900', letterSpacing: 0.5, textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  actionContainer: { marginBottom: Platform.OS === 'android' ? 20 : 30, marginTop: 80, paddingHorizontal: 20, position: 'relative' },
+  yearlyButton: { backgroundColor: '#10B981', borderRadius: 16, paddingVertical: 18, paddingHorizontal: 40, alignItems: 'center', marginBottom: 8, shadowColor: '#10B981', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.7, shadowRadius: 12, elevation: 8, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.3)', position: 'absolute', left: 35, right: 20, top: 0, zIndex: 10 },
+  yearlyButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 0.8, textShadowColor: 'rgba(0, 0, 0, 0.7)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3 },
   legalContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingBottom: Platform.OS === 'android' ? 5 : 10 },
   legalLink: { paddingHorizontal: 8 },
   legalText: { fontSize: 12, color: '#FFFFFF', textDecorationLine: 'underline', fontWeight: '600', textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },

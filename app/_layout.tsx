@@ -41,7 +41,7 @@ import { useLanguage } from '@/lib/LanguageContext';
 import SplashScreenWithAd from '@/components/SplashScreenWithAd';
 // import { isVersionLessThan, openStoreForUpdate } from '@/lib/updateUtils';
 import VersionGate from '@/components/VersionGate';
-import { Settings as FBSettings } from 'react-native-fbsdk-next';
+import { Settings as FBSettings, AppEventsLogger } from 'react-native-fbsdk-next';
 import { getTrackingPermissionsAsync, requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 
 // Simple diagnostic logger for native promise errors
@@ -190,7 +190,7 @@ export default function RootLayout() {
   useEffect(() => {
     console.log('🧩 [DIAG] INIT: AdMob init effect start');
     setShowAppOpenAd(true);
-    // Initialize AdMob SDK
+    // Initialize AdMob SDK with better error handling
     try {
       // Ensure consent/ATT before mobileAds initialize
       (async () => {
@@ -199,7 +199,11 @@ export default function RootLayout() {
           const { ensureAdsConsentInitialized } = await import('@/lib/adsConsent');
           await ensureAdsConsentInitialized();
           console.log('🧩 [DIAG] AdMob: ensureAdsConsentInitialized -> done');
-        } catch (e) { logNativeError('AdMob.ensureAdsConsentInitialized', e); }
+        } catch (e) { 
+          logNativeError('AdMob.ensureAdsConsentInitialized', e);
+          // Continue even if consent fails
+        }
+        
         try {
           console.log('🧩 [DIAG] AdMob: setRequestConfiguration -> start');
           await mobileAds()
@@ -209,14 +213,25 @@ export default function RootLayout() {
             tagForUnderAgeOfConsent: false,
             });
           console.log('🧩 [DIAG] AdMob: setRequestConfiguration -> done');
-        } catch (e) { logNativeError('AdMob.setRequestConfiguration', e); }
+        } catch (e) { 
+          logNativeError('AdMob.setRequestConfiguration', e);
+          // Continue even if configuration fails
+        }
+        
         try {
           console.log('🧩 [DIAG] AdMob: initialize -> start');
           await mobileAds().initialize();
           console.log('🧩 [DIAG] AdMob: initialize -> done');
-        } catch (e) { logNativeError('AdMob.initialize', e); }
+        } catch (e) { 
+          logNativeError('AdMob.initialize', e);
+          // Continue even if AdMob initialization fails
+          setShowAppOpenAd(false); // Disable ads if initialization fails
+        }
       })();
-    } catch (e) { logNativeError('AdMob.init.effect', e); }
+    } catch (e) { 
+      logNativeError('AdMob.init.effect', e);
+      setShowAppOpenAd(false); // Disable ads if there's an error
+    }
   }, []);
 
   // Forced update gate: removed (handled by VersionGate)
@@ -302,38 +317,101 @@ export default function RootLayout() {
     const initApp = async () => {
       try {
         console.log('🧩 [DIAG] INIT: App init -> start');
-        // Preload onboarding images
-        await Promise.all([
-          (async () => { try { console.log('🧩 [DIAG] Asset.load -> start'); await Asset.loadAsync(require('../assets/images/adaptive-icon.png')); console.log('🧩 [DIAG] Asset.load -> done'); } catch (e) { logNativeError('Asset.load', e); } })(),
-        ]);
+        
+        // Add delay to prevent race conditions
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Preload onboarding images with error handling
+        try {
+          console.log('🧩 [DIAG] Asset.load -> start');
+          await Asset.loadAsync(require('../assets/images/adaptive-icon.png'));
+          console.log('🧩 [DIAG] Asset.load -> done');
+        } catch (e) { 
+          logNativeError('Asset.load', e);
+          // Continue even if asset loading fails
+        }
 
         if (isFirebaseInitialized()) {
           console.log('🧩 [DIAG] Firebase already initialized');
           setFirebaseInitialized(true);
           // Ensure Google Sign-In is configured even if Firebase was already initialized
-          try { console.log('🧩 [DIAG] configureGoogleSignIn -> start'); configureGoogleSignIn(); console.log('🧩 [DIAG] configureGoogleSignIn -> done'); } catch (e) { logNativeError('configureGoogleSignIn', e); }
+          try { 
+            console.log('🧩 [DIAG] configureGoogleSignIn -> start'); 
+            configureGoogleSignIn(); 
+            console.log('🧩 [DIAG] configureGoogleSignIn -> done'); 
+          } catch (e) { 
+            logNativeError('configureGoogleSignIn', e);
+            // Continue even if Google Sign-In fails
+          }
           // Initialize analytics
           setTimeout(() => {
           setAppIsReady(true);
           setIsLoading(false);
-            console.log('🧩 [DIAG] INIT: App ready (fast-path)');
-          }, 3000);
-          return;
-        }
+          console.log('🧩 [DIAG] INIT: App ready (fast-path)');
+          
+          // Facebook Event - App Launched
+          try {
+            AppEventsLogger.logEvent('App_Launched', {
+              'source': 'app_start',
+              'user_id': auth.currentUser?.uid || 'anonymous',
+              'timestamp': new Date().toISOString()
+            });
+            console.log('✅ Facebook event: App_Launched logged');
+          } catch (fbError) {
+            console.log('⚠️ Facebook App_Launched event failed:', fbError);
+          }
+        }, 2000); // Reduced timeout
+        return;
+      }
   
-        try { console.log('🧩 [DIAG] initializeFirebase -> start'); await initializeFirebase(); console.log('🧩 [DIAG] initializeFirebase -> done'); } catch (e) { logNativeError('initializeFirebase', e); }
-        try { console.log('🧩 [DIAG] configureGoogleSignIn -> start'); configureGoogleSignIn(); console.log('🧩 [DIAG] configureGoogleSignIn -> done'); } catch (e) { logNativeError('configureGoogleSignIn', e); }
+        try { 
+          console.log('🧩 [DIAG] initializeFirebase -> start'); 
+          await initializeFirebase(); 
+          console.log('🧩 [DIAG] initializeFirebase -> done'); 
+        } catch (e) { 
+          logNativeError('initializeFirebase', e);
+          // Continue even if Firebase initialization fails
+        }
+        
+        try { 
+          console.log('🧩 [DIAG] configureGoogleSignIn -> start'); 
+          configureGoogleSignIn(); 
+          console.log('🧩 [DIAG] configureGoogleSignIn -> done'); 
+        } catch (e) { 
+          logNativeError('configureGoogleSignIn', e);
+          // Continue even if Google Sign-In fails
+        }
         
         setFirebaseInitialized(true);
         console.log('🧩 [DIAG] INIT: App is ready (cold-path)');
         setTimeout(() => {
-        setAppIsReady(true);
-        setIsLoading(false);
-        }, 3000);
+          setAppIsReady(true);
+          setIsLoading(false);
+          
+          // Facebook Event - App Launched (Cold Start)
+          try {
+            AppEventsLogger.logEvent('App_Launched', {
+              'source': 'app_start_cold',
+              'user_id': auth.currentUser?.uid || 'anonymous',
+              'timestamp': new Date().toISOString()
+            });
+            console.log('✅ Facebook event: App_Launched (cold) logged');
+          } catch (fbError) {
+            console.log('⚠️ Facebook App_Launched (cold) event failed:', fbError);
+          }
+        }, 2000); // Reduced timeout
       } catch (error) {
+        console.error('❌ Critical error in app initialization:', error);
         const errorMessage = error instanceof Error ? error.message : String(error);
         setError(`Error initializing app: ${errorMessage}`);
         setErrorDetails(error instanceof Error ? error.stack || null : null);
+        
+        // Set app as ready even on error to prevent infinite loading
+        setTimeout(() => {
+          setAppIsReady(true);
+          setIsLoading(false);
+        }, 1000);
+        
         if (retryCount < 3) {
           setTimeout(() => setRetryCount((prev) => prev + 1), 1000);
         }
@@ -454,17 +532,34 @@ export default function RootLayout() {
   useEffect(() => {
     (async () => {
       try {
+        // Initialize Facebook SDK with better error handling
         try {
           console.log('🧩 [DIAG] FBSettings: configure -> start');
           const extra: any = (Constants as any)?.expoConfig?.extra || {};
           const appId = typeof extra?.FB_APP_ID === 'string' ? extra.FB_APP_ID : undefined;
           const displayName = typeof extra?.FB_DISPLAY_NAME === 'string' ? extra.FB_DISPLAY_NAME : undefined;
-          if (appId && (FBSettings as any)?.setAppID) { try { (FBSettings as any).setAppID(appId); } catch (e) { logNativeError('FBSettings.setAppID', e); } }
-          if (displayName && (FBSettings as any)?.setDisplayName) { try { (FBSettings as any).setDisplayName(displayName); } catch (e) { logNativeError('FBSettings.setDisplayName', e); } }
-          if ((FBSettings as any)?.initializeSDK) { try { console.log('🧩 [DIAG] FBSettings: initializeSDK -> start'); (FBSettings as any).initializeSDK(); console.log('🧩 [DIAG] FBSettings: initializeSDK -> done'); } catch (e) { logNativeError('FBSettings.initializeSDK', e); } }
+          
+          if (appId && (FBSettings as any)?.setAppID) { 
+            try { (FBSettings as any).setAppID(appId); } catch (e) { logNativeError('FBSettings.setAppID', e); } 
+          }
+          if (displayName && (FBSettings as any)?.setDisplayName) { 
+            try { (FBSettings as any).setDisplayName(displayName); } catch (e) { logNativeError('FBSettings.setDisplayName', e); } 
+          }
+          if ((FBSettings as any)?.initializeSDK) { 
+            try { 
+              console.log('🧩 [DIAG] FBSettings: initializeSDK -> start'); 
+              (FBSettings as any).initializeSDK(); 
+              console.log('🧩 [DIAG] FBSettings: initializeSDK -> done'); 
+            } catch (e) { 
+              logNativeError('FBSettings.initializeSDK', e);
+              // Continue even if Facebook SDK fails
+            } 
+          }
+          
           // Enable auto app events & advertiser ID collection
           try { (FBSettings as any).setAutoLogAppEventsEnabled?.(true); } catch (e) { logNativeError('FBSettings.setAutoLogAppEventsEnabled', e); }
           try { (FBSettings as any).setAdvertiserIDCollectionEnabled?.(true); } catch (e) { logNativeError('FBSettings.setAdvertiserIDCollectionEnabled', e); }
+          
           // iOS ATT -> enable advertiser tracking if granted
           if (Platform.OS === 'ios') {
             try {
@@ -476,14 +571,25 @@ export default function RootLayout() {
             } catch (e) { logNativeError('ATT.request', e); }
           }
           console.log('🧩 [DIAG] FBSettings: configure -> done');
-        } catch (e) { logNativeError('FBSettings.configure.block', e); }
+        } catch (e) { 
+          logNativeError('FBSettings.configure.block', e);
+          // Continue even if Facebook SDK fails
+        }
+        
+        // Initialize RevenueCat with better error handling
         try {
           console.log('🧩 [DIAG] RevenueCat: initRevenueCat -> start');
-        const { initRevenueCat } = await import('@/lib/revenueCat');
-        await initRevenueCat();
+          const { initRevenueCat } = await import('@/lib/revenueCat');
+          await initRevenueCat();
           console.log('🧩 [DIAG] RevenueCat: initRevenueCat -> done');
-        } catch (e) { logNativeError('RevenueCat.init', e); }
-      } catch {}
+        } catch (e) { 
+          logNativeError('RevenueCat.init', e);
+          // Continue even if RevenueCat fails
+        }
+      } catch (error) {
+        logNativeError('SDK.init.outer', error);
+        // Continue even if all SDK initialization fails
+      }
     })();
   }, []);
 

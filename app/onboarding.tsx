@@ -185,8 +185,7 @@ export default function OnboardingScreen() {
     } else if (currentStage === 'video-creation') {
       setCurrentStage('pulse-ai');
     } else if (currentStage === 'pulse-ai') {
-      setPaywallSource('pulse-ai');
-      setCurrentStage('paywall');
+      setCurrentStage('info');
     } else if (currentStage === 'paywall') {
       setCurrentStage('afterinfo');
     } else if (currentStage === 'afterinfo') {
@@ -226,41 +225,15 @@ export default function OnboardingScreen() {
     } else if (currentStage === 'onlogin') {
       setCurrentStage('onsignup');
     } else if (currentStage === 'info') {
-      setCurrentStage('paywall');
+      setCurrentStage('pulse-ai');
     } else if (currentStage === 'myplan') {
       setCurrentStage('afterinfo');
     }
   };
 
   const handleAfterInfoComplete = async () => {
-    try {
-      console.log('🔍 Checking premium status in afterinfo...');
-      
-      // Check if user has temporary premium purchase
-      const tempPremium = await getTempPremiumPurchase();
-      console.log('📦 Temporary premium:', tempPremium ? 'Found' : 'Not found');
-      
-      // Check if user has active premium
-      const isPremium = await checkPremiumStatus(true);
-      console.log('💎 Active premium:', isPremium ? 'Yes' : 'No');
-      
-      if (tempPremium || isPremium) {
-        console.log('✅ User has premium, going to myplan');
-        setCurrentStage('myplan');
-      } else {
-        console.log('⚠️ User has no premium, going to paywall');
-        // User doesn't have premium, go to paywall again
-        setHasVisitedPaywall(true);
-        setPaywallSource('afterinfo');
-        setCurrentStage('paywall');
-      }
-    } catch (error) {
-      console.error('❌ Error checking premium status:', error);
-      // Default to paywall if there's an error
-      setHasVisitedPaywall(true);
-      setPaywallSource('afterinfo');
-      setCurrentStage('paywall');
-    }
+    // Always proceed to My Plan summary screen
+    setCurrentStage('myplan');
   };
 
   const handlePaywallComplete = () => {
@@ -276,8 +249,8 @@ export default function OnboardingScreen() {
       // If coming from pulse-ai, go to info
       setCurrentStage('info');
     } else if (paywallSource === 'afterinfo') {
-      // If coming from afterinfo, go to myplan
-      setCurrentStage('myplan');
+      // If coming from afterinfo, finish onboarding and go to tabs/index
+      handleComplete();
     }
   };
 
@@ -374,7 +347,7 @@ export default function OnboardingScreen() {
 
   const renderMyPlanStage = () => (
     <MyPlanStage
-      onComplete={handleComplete}
+      onComplete={() => { setPaywallSource('afterinfo'); setCurrentStage('paywall'); }}
       onBack={handleBackStage}
     />
   );

@@ -203,11 +203,29 @@ export const savePulseAIConversation = async (conversation: {
     const userRef = doc(db, 'users', user.uid);
     const userDoc = await getDoc(userRef);
     
+    let userData: UserData;
+    
     if (!userDoc.exists()) {
-      throw new Error('User document not found');
+      console.log('⚠️ User document not found, creating new one');
+      // Create new user document
+      const newUserData: UserData = {
+        uid: user.uid,
+        email: user.email || '',
+        displayName: user.displayName || '',
+        photoURL: user.photoURL || '',
+        isPremium: false,
+        createdAt: new Date(),
+        providers: 'email',
+        pulseAIConversations: []
+      };
+      
+      await setDoc(userRef, newUserData);
+      userData = newUserData;
+      console.log('✅ New user document created');
+    } else {
+      userData = userDoc.data() as UserData;
     }
 
-    const userData = userDoc.data() as UserData;
     const conversations = userData.pulseAIConversations || [];
     
     // Add new conversation
@@ -245,11 +263,29 @@ export const saveJournalEntry = async (entry: {
     const userRef = doc(db, 'users', user.uid);
     const userDoc = await getDoc(userRef);
     
+    let userData: UserData;
+    
     if (!userDoc.exists()) {
-      throw new Error('User document not found');
+      console.log('⚠️ User document not found, creating new one');
+      // Create new user document
+      const newUserData: UserData = {
+        uid: user.uid,
+        email: user.email || '',
+        displayName: user.displayName || '',
+        photoURL: user.photoURL || '',
+        isPremium: false,
+        createdAt: new Date(),
+        providers: 'email',
+        journalEntries: []
+      };
+      
+      await setDoc(userRef, newUserData);
+      userData = newUserData;
+      console.log('✅ New user document created');
+    } else {
+      userData = userDoc.data() as UserData;
     }
 
-    const userData = userDoc.data() as UserData;
     const entries = userData.journalEntries || [];
     
     // Add new entry
@@ -288,11 +324,29 @@ export const saveUserVideo = async (video: {
     const userRef = doc(db, 'users', user.uid);
     const userDoc = await getDoc(userRef);
     
+    let userData: UserData;
+    
     if (!userDoc.exists()) {
-      throw new Error('User document not found');
+      console.log('⚠️ User document not found, creating new one');
+      // Create new user document
+      const newUserData: UserData = {
+        uid: user.uid,
+        email: user.email || '',
+        displayName: user.displayName || '',
+        photoURL: user.photoURL || '',
+        isPremium: false,
+        createdAt: new Date(),
+        providers: 'email',
+        userVideos: []
+      };
+      
+      await setDoc(userRef, newUserData);
+      userData = newUserData;
+      console.log('✅ New user document created');
+    } else {
+      userData = userDoc.data() as UserData;
     }
 
-    const userData = userDoc.data() as UserData;
     const videos = userData.userVideos || [];
     
     // Add new video
@@ -330,11 +384,29 @@ export const saveUserPhoto = async (photo: {
     const userRef = doc(db, 'users', user.uid);
     const userDoc = await getDoc(userRef);
     
+    let userData: UserData;
+    
     if (!userDoc.exists()) {
-      throw new Error('User document not found');
+      console.log('⚠️ User document not found, creating new one');
+      // Create new user document
+      const newUserData: UserData = {
+        uid: user.uid,
+        email: user.email || '',
+        displayName: user.displayName || '',
+        photoURL: user.photoURL || '',
+        isPremium: false,
+        createdAt: new Date(),
+        providers: 'email',
+        userPhotos: []
+      };
+      
+      await setDoc(userRef, newUserData);
+      userData = newUserData;
+      console.log('✅ New user document created');
+    } else {
+      userData = userDoc.data() as UserData;
     }
 
-    const userData = userDoc.data() as UserData;
     const photos = userData.userPhotos || [];
     
     // Add new photo
